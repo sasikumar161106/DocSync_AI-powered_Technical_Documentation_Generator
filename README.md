@@ -1,7 +1,6 @@
 # DocSync: AI-Powered Technical Documentation Generator
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+
 </div>
 
 DocSync is an AI agent designed to streamline the process of technical documentation generation for developers. It offers robust integration with GitHub, allowing users to analyze entire repositories, generate comprehensive `README.md`-style documentation, and automatically commit these updates back to their projects. Additionally, it provides a flexible playground for generating documentation for individual code snippets. Built as an AI Studio app, DocSync features a modern React frontend and a powerful Node.js backend powered by Google's Gemini API.
