@@ -149,4 +149,4 @@ Once the application is running, open your web browser and navigate to `http://l
 
 ## License
 
-This project currently does not provide an explicit open-source license in its repository. Users are advised to clarify the terms of use with the project maintainers before using, distributing, or modifying the software.
+This project is licensed under the [MIT License](LICENSE.md).
