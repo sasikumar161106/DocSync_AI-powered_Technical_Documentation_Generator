@@ -1,0 +1,407 @@
+import React, { useEffect, useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { Github, Code2, RefreshCw, Activity, ExternalLink, Send, ArrowRight, Loader2, CheckCircle2, Book, Clock, TerminalSquare } from 'lucide-react';
+
+export default function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [repos, setRepos] = useState<any[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<any>(null);
+  
+  const [autoUpdates, setAutoUpdates] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('docsync_autoupdate');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [lastObservedShas, setLastObservedShas] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('docsync_shas');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [autoUpdateLogs, setAutoUpdateLogs] = useState<{id: string, time: string, message: string}[]>([]);
+  // Use a ref to ensure interval picks up the freshest state
+  const stateRef = useRef({ autoUpdates, lastObservedShas });
+  useEffect(() => {
+    stateRef.current = { autoUpdates, lastObservedShas };
+  }, [autoUpdates, lastObservedShas]);
+
+  const addLog = (message: string) => {
+    setAutoUpdateLogs(prev => {
+       const newLog = { id: Date.now().toString() + Math.random(), time: new Date().toLocaleTimeString(), message };
+       return [newLog, ...prev].slice(0, 50);
+    });
+  };
+
+  useEffect(() => {
+    // Polling logic for Auto Update every 15 seconds
+    const intervalId = setInterval(async () => {
+      const { autoUpdates: currentAutoUpdates, lastObservedShas: currentShas } = stateRef.current;
+      const activeRepos = Object.keys(currentAutoUpdates).filter(repo => currentAutoUpdates[repo]);
+      if (activeRepos.length === 0) return;
+
+      for (const repo of activeRepos) {
+         try {
+           const res = await fetch(`/api/github/repo-latest-sha?repo=${repo}`);
+           if (!res.ok) continue;
+           const data = await res.json();
+           
+           if (data.sha) {
+             const lastSha = currentShas[repo];
+             
+             if (lastSha && lastSha !== data.sha) {
+               // A change was detected!
+               
+               // Update SHA instantly to prevent duplicate triggers
+               const newShas = { ...stateRef.current.lastObservedShas, [repo]: data.sha };
+               setLastObservedShas(newShas);
+               localStorage.setItem('docsync_shas', JSON.stringify(newShas));
+               stateRef.current.lastObservedShas = newShas; // immediate sync
+
+               addLog(`[${repo}] New commit detected (${data.sha.substring(0, 7)}). Gemini analyzing changes...`);
+               
+               try {
+                 const updateRes = await fetch('/api/docs/auto-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ repoFullName: repo, sha: data.sha })
+                 });
+                 if (updateRes.ok) {
+                    const updateData = await updateRes.json();
+                    if (updateData.status === 'no_update_needed') {
+                       addLog(`[${repo}] Gemini analysis: No README.md update needed.`);
+                    } else if (updateData.status === 'updated') {
+                       addLog(`[${repo}] ✨ README.md successfully updated!`);
+                    } else if (updateData.status === 'ignored_own_commit') {
+                       addLog(`[${repo}] Ignored DocSync automated commit.`);
+                    } else if (updateData.status === 'no_files_changed') {
+                       addLog(`[${repo}] No relevant files changed in commit.`);
+                    }
+                 } else {
+                   addLog(`[${repo}] ❌ Auto-update failed to process.`);
+                 }
+               } catch (e) {
+                 addLog(`[${repo}] ❌ Network error during auto-update.`);
+               }
+             } else if (!lastSha) {
+               // First time seeing this repo, just register it
+               const newShas = { ...stateRef.current.lastObservedShas, [repo]: data.sha };
+               setLastObservedShas(newShas);
+               localStorage.setItem('docsync_shas', JSON.stringify(newShas));
+               stateRef.current.lastObservedShas = newShas;
+               addLog(`[${repo}] Auto-update initialized. Watching for new commits...`);
+             }
+           }
+         } catch (err) {
+           console.error("Auto update check failed for", repo, err);
+         }
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const toggleAutoUpdate = (e: React.MouseEvent, repoFullName: string) => {
+    e.stopPropagation();
+    const newState = { ...autoUpdates, [repoFullName]: !autoUpdates[repoFullName] };
+    setAutoUpdates(newState);
+    localStorage.setItem('docsync_autoupdate', JSON.stringify(newState));
+  };
+  
+  const [generating, setGenerating] = useState(false);
+  const [generatedDoc, setGeneratedDoc] = useState<string | null>(null);
+  const [customInstruction, setCustomInstruction] = useState('');
+  const [pushing, setPushing] = useState(false);
+  const [pushSuccessUrl, setPushSuccessUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRepos();
+  }, []);
+
+  const fetchRepos = async () => {
+    setLoading(true);
+    setError(null);
+    setSelectedRepo(null);
+    setGeneratedDoc(null);
+    setPushSuccessUrl(null);
+    try {
+      const res = await fetch('/api/github/repos');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch repos');
+      setRepos(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectRepo = (repo: any) => {
+    setSelectedRepo(repo);
+    setGeneratedDoc(null);
+    setPushSuccessUrl(null);
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedRepo) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/docs/generate-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoFullName: selectedRepo.full_name, customInstruction }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to generate documentation');
+      
+      setGeneratedDoc(data.document);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handlePush = async () => {
+    if (!selectedRepo || !generatedDoc) return;
+    setPushing(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/github/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          repo: selectedRepo.full_name,
+          path: 'README.md',
+          content: generatedDoc,
+          message: `Add auto-generated repository documentation`
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to push documentation');
+      
+      setPushSuccessUrl(data.url);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  return (
+    <div className="max-w-6xl">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-medium text-slate-800">Your Repositories</h2>
+          <p className="text-slate-500 mt-1">Select a repository to analyze its structure and generate comprehensive documentation.</p>
+        </div>
+        <button 
+          onClick={fetchRepos}
+          disabled={loading}
+          className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-md hover:bg-slate-50 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {error && error.includes('GITHUB_TOKEN') ? (
+        <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl flex items-start gap-4">
+          <div className="text-amber-800 flex-1">
+            <h3 className="font-semibold text-lg mb-2">GitHub Token is missing</h3>
+            <p className="text-sm">Please configure the <code className="bg-amber-100 px-1 rounded">GITHUB_TOKEN</code> environment variable in your <code>.env</code> file. Without this, DocSync cannot fetch your repositories.</p>
+          </div>
+        </div>
+      ) : loading ? (
+        <div className="flex flex-col items-center justify-center p-12 bg-white border border-slate-200 rounded-xl">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-4" />
+          <p className="text-slate-500 font-medium">Fetching your repositories...</p>
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 p-6 rounded-xl text-red-800">
+          <p><strong>Error:</strong> {error}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Repositories List Card */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[650px] overflow-hidden lg:col-span-1">
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between shrink-0">
+              <h3 className="font-medium text-slate-800 text-sm">Select Repository</h3>
+              <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">{repos?.length || 0}</span>
+            </div>
+            <div className="flex-1 overflow-auto p-2">
+              {!repos || repos.length === 0 ? (
+                 <div className="p-4 text-sm text-slate-500 text-center">No repositories found.</div>
+              ) : (
+                <div className="space-y-1">
+                  {!selectedRepo && repos.length > 0 && (
+                    <div className="mb-4 p-4 border border-blue-100 bg-blue-50/50 rounded-lg">
+                      <div className="flex items-center gap-2 text-blue-800 mb-2">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-xs font-semibold uppercase tracking-wider">Recently Changed</span>
+                      </div>
+                      <button
+                        onClick={() => handleSelectRepo(repos[0])}
+                        className="w-full text-left bg-white px-4 py-3 rounded border border-blue-200 hover:border-blue-400 hover:shadow-sm transition-all flex items-center gap-3"
+                      >
+                        <Book className="w-5 h-5 text-blue-600 shrink-0" />
+                        <div className="truncate">
+                          <span className="font-medium block truncate text-slate-900">{repos[0].name}</span>
+                          <span className="text-xs text-slate-500 block truncate mt-0.5">{repos[0].full_name}</span>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-slate-400 ml-auto" />
+                      </button>
+                    </div>
+                  )}
+                  {repos.map(repo => (
+                    <button
+                      key={repo.id}
+                      onClick={() => handleSelectRepo(repo)}
+                      className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-colors flex flex-col gap-2 ${selectedRepo?.id === repo.id ? 'bg-blue-50 border border-blue-200 text-blue-800' : 'hover:bg-slate-50 border border-transparent text-slate-700'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Book className={`w-4 h-4 shrink-0 ${selectedRepo?.id === repo.id ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <div className="flex-1 truncate">
+                          <span className="font-medium block truncate">{repo.name}</span>
+                          <span className="text-xs opacity-70 block truncate mt-0.5">{repo.full_name}</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center pl-7" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Auto Update</span>
+                        <div 
+                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${autoUpdates[repo.full_name] ? 'bg-blue-600' : 'bg-slate-300'}`}
+                          onClick={(e) => toggleAutoUpdate(e, repo.full_name)}
+                        >
+                          <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 transition-transform duration-200 ${autoUpdates[repo.full_name] ? 'translate-x-[18px]' : 'translate-x-[2px]'}`} />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Repo Details / Documentation Preview Card */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-[650px] overflow-hidden lg:col-span-2">
+            {!selectedRepo ? (
+               <div className="flex-1 flex flex-col h-full bg-slate-50/30">
+                 <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400">
+                    <Github className="w-12 h-12 mb-4 opacity-30" />
+                    <p className="text-center font-medium">Select a repository from the list</p>
+                    <p className="text-center text-sm mt-2 max-w-sm">DocSync will analyze the top codebase files and generate a comprehensive documentation summary.</p>
+                 </div>
+                 {/* Auto Update Logs Panel */}
+                 <div className="h-64 border-t border-slate-200 bg-slate-900 flex flex-col shrink-0">
+                    <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
+                       <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                         <TerminalSquare className="w-4 h-4 text-emerald-500" />
+                         Auto Update Activity Logs
+                       </h4>
+                       <div className="flex items-center gap-2 text-xs text-slate-500">
+                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                         Listening for commits...
+                       </div>
+                    </div>
+                    <div className="flex-1 overflow-auto p-4 font-mono text-xs text-slate-400 space-y-2">
+                       {autoUpdateLogs.length === 0 ? (
+                         <div className="text-slate-600 italic">No activity yet. Turn on Auto Update for a repository to start tracking.</div>
+                       ) : (
+                         autoUpdateLogs.map(log => (
+                           <div key={log.id} className="flex gap-3">
+                             <span className="text-slate-600 shrink-0">[{log.time}]</span>
+                             <span className={log.message.includes('✨') ? 'text-emerald-400' : log.message.includes('❌') ? 'text-red-400' : log.message.includes('No README.md update needed') ? 'text-yellow-400/80' : 'text-slate-300'}>
+                               {log.message}
+                             </span>
+                           </div>
+                         ))
+                       )}
+                    </div>
+                 </div>
+               </div>
+            ) : generatedDoc ? (
+               <>
+                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 shrink-0 flex justify-between items-center">
+                    <div>
+                      <h3 className="font-medium text-slate-800">Generated Documentation</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">{selectedRepo.full_name} • Saving as README.md</p>
+                    </div>
+                    <button 
+                      onClick={() => handleSelectRepo(selectedRepo)}
+                      className="text-sm text-slate-500 hover:text-slate-800"
+                    >
+                      Reset
+                    </button>
+                 </div>
+                 <div className="flex-1 overflow-auto p-6 prose prose-sm prose-slate max-w-none">
+                    <ReactMarkdown>{generatedDoc}</ReactMarkdown>
+                 </div>
+                 <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+                    {pushSuccessUrl ? (
+                      <a href={pushSuccessUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-600 font-medium text-sm hover:underline">
+                        <CheckCircle2 className="w-4 h-4" /> Successfully pushed README.md
+                      </a>
+                    ) : (<div></div>)}
+                    <button 
+                      onClick={handlePush}
+                      disabled={pushing || !!pushSuccessUrl}
+                      className="bg-slate-900 text-white px-5 py-2.5 rounded-md hover:bg-slate-800 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {pushing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {pushSuccessUrl ? 'Added to Repo' : 'Commit Documentation'}
+                    </button>
+                 </div>
+               </>
+            ) : (
+               <div className="flex-1 flex flex-col items-center justify-center p-12 bg-slate-50/30">
+                  <Book className="w-16 h-16 mb-4 text-blue-100" />
+                  <h3 className="text-xl font-medium text-slate-800 mb-2">{selectedRepo.name}</h3>
+                  <p className="text-center text-slate-500 max-w-md text-sm mb-6">
+                    We will analyze the repository structure, review core code files, and build an overarching documentation document.
+                  </p>
+                  
+                  <div className="w-full max-w-md mb-8">
+                     <label className="block text-sm font-medium text-slate-700 mb-2">Custom Instructions (Optional)</label>
+                     <textarea 
+                       value={customInstruction}
+                       onChange={(e) => setCustomInstruction(e.target.value)}
+                       placeholder="e.g. Focus specifically on the API routes and authentication flow..."
+                       className="w-full p-3 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm resize-none h-24"
+                     />
+                  </div>
+
+                  <button 
+                    onClick={handleGenerate}
+                    disabled={generating}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Analyzing Repository...
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="w-4 h-4" />
+                        Analyze & Generate Documentation
+                      </>
+                    )}
+                  </button>
+               </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
