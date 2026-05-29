@@ -63,7 +63,7 @@ export default function Playground() {
       <div className="w-1/2 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-3xl font-bold text-white tracking-tight">AI Playground</h2>
+            <h2 className="text-3xl font-extrabold text-white tracking-tight">AI Playground</h2>
             <p className="text-slate-400 mt-2 text-sm max-w-md">Test DocSync's AI by pasting isolated code snippets. Tune the context to see how the model responds.</p>
           </div>
         </div>
@@ -129,10 +129,10 @@ export default function Playground() {
       <div className="w-1/2 flex flex-col">
         {!generatedDoc ? (
           <div className="flex-1 glass-panel rounded-2xl flex flex-col items-center justify-center p-12 text-slate-400 border-white/5 shadow-xl">
-            <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-8 shadow-inner border border-white/5">
-              <FileCode2 className="w-12 h-12 text-indigo-500/50" />
+            <div className="w-40 h-40 mb-8 rounded-2xl overflow-hidden opacity-60">
+              <img src="/images/empty-state.png" alt="Awaiting code" className="w-full h-full object-cover" />
             </div>
-            <h3 className="text-xl font-medium text-slate-300 mb-2">Awaiting Code</h3>
+            <h3 className="text-xl font-semibold text-slate-300 mb-2">Awaiting Code</h3>
             <p className="text-center text-sm max-w-sm">
               Paste your code on the left and click Generate to see DocSync AI in action.
             </p>

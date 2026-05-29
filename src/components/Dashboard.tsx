@@ -171,19 +171,26 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Your Repositories</h2>
-          <p className="text-slate-400 mt-2 text-sm max-w-lg">Select a repository to analyze its structure and generate comprehensive documentation.</p>
+      {/* Hero Section with themed image */}
+      <div className="relative mb-8 glass-panel rounded-2xl overflow-hidden border-white/5">
+        <div className="absolute inset-0 z-0">
+          <img src="/images/hero-illustration.png" alt="" className="w-full h-full object-cover opacity-30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#09090b] via-[#09090b]/80 to-transparent" />
         </div>
-        <button 
-          onClick={fetchRepos}
-          disabled={loading}
-          className="glass-panel text-white px-5 py-2.5 rounded-xl hover:bg-white/10 hover:shadow-lg transition-all duration-300 text-sm font-medium flex items-center gap-2 group border-white/10"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-400' : 'text-slate-400 group-hover:rotate-180 transition-transform duration-500'}`} />
-          Refresh Repos
-        </button>
+        <div className="relative z-10 flex items-center justify-between p-8">
+          <div>
+            <h2 className="text-3xl font-extrabold text-white tracking-tight">Your Repositories</h2>
+            <p className="text-slate-400 mt-2 text-sm max-w-lg leading-relaxed">Select a repository to analyze its structure and generate comprehensive, AI-powered documentation.</p>
+          </div>
+          <button 
+            onClick={fetchRepos}
+            disabled={loading}
+            className="glass-panel text-white px-5 py-2.5 rounded-xl hover:bg-white/10 hover:shadow-lg transition-all duration-300 text-sm font-semibold flex items-center gap-2 group border-white/10"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-400' : 'text-slate-400 group-hover:rotate-180 transition-transform duration-500'}`} />
+            Refresh Repos
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -250,10 +257,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2">
           {!selectedRepo ? (
             <div className="glass-panel rounded-2xl h-full min-h-[400px] flex flex-col items-center justify-center p-12 text-slate-400 border-white/5">
-              <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6 shadow-inner border border-white/5">
-                <Github className="w-8 h-8 text-slate-500" />
+              <div className="w-48 h-48 mb-8 rounded-2xl overflow-hidden opacity-70">
+                <img src="/images/empty-state.png" alt="Select a repository" className="w-full h-full object-cover" />
               </div>
-              <h3 className="text-xl font-medium text-slate-200 mb-2">No Repository Selected</h3>
+              <h3 className="text-xl font-semibold text-slate-200 mb-2">No Repository Selected</h3>
               <p className="text-center text-sm max-w-sm leading-relaxed">
                 Choose a repository from the list to analyze its codebase and generate high-quality technical documentation.
               </p>

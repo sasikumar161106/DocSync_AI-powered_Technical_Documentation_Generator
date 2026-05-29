@@ -35,8 +35,8 @@ export default function App() {
       {/* Glass Sidebar */}
       <div className="w-64 glass-sidebar flex flex-col fixed inset-y-0 z-20">
         <div className="h-16 flex items-center px-6 border-b border-white/5">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center mr-3 border border-primary/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-            <BookOpen className="w-5 h-5 text-indigo-400" />
+          <div className="w-9 h-9 rounded-lg overflow-hidden mr-3 border border-primary/30 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
+            <img src="/images/sidebar-logo.png" alt="DocSync AI" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-lg text-white tracking-tight text-glow">DocSync AI</span>
         </div>
