@@ -7,7 +7,7 @@ Built with a modern React frontend and a powerful Node.js/Express backend powere
 ## 📸 Demo & Screenshots
 
 ### Video Walkthrough
-<video src="./public/videos/docsync-demo.mp4" controls width="100%"></video>
+<video src="https://github.com/sasikumar161106/DocSync_AI-powered_Technical_Documentation_Generator/raw/main/public/videos/docsync-demo.mp4" controls width="100%"></video>
 
 ### Dashboard
 ![Dashboard Demo](./public/images/dashboard-demo.png)
