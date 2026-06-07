@@ -4,6 +4,20 @@ DocSync is an autonomous AI agent that integrates seamlessly with GitHub to **au
 
 Built with a modern React frontend and a powerful Node.js/Express backend powered by Google's Gemini 2.5 Flash, DocSync eliminates the documentation bottleneck from your development cycle.
 
+## 📸 Demo & Screenshots
+
+### Video Walkthrough
+<video src="./public/videos/docsync-demo.mp4" controls width="100%"></video>
+
+### Dashboard
+![Dashboard Demo](./public/images/dashboard-demo.png)
+
+### Playground
+![Playground Demo](./public/images/playground-demo.png)
+
+### Webhook Activity
+![Webhook Activity Demo](./public/images/webhook-activity-demo.png)
+
 ---
 
 ## ✨ Features
